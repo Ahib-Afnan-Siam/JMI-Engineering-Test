@@ -21,6 +21,7 @@ it('exports nested readings as CSV', function (): void {
     $response = $this->get("/api/anemometers/{$anemometer->id}/readings/export?format=csv");
 
     $response->assertOk();
+    $this->assertStringContainsString('text/csv', $response->headers->get('Content-Type'));
     $response->assertHeader('Content-Disposition');
 });
 
