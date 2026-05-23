@@ -33,9 +33,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('anemometers', AnemometerController::class);
 
     // nested readings under anemometer
+    Route::get('anemometers/{anemometer}/readings/export', [AnemometerReadingController::class, 'export']);
     Route::get('anemometers/{anemometer}/readings', [AnemometerReadingController::class, 'index']);
     Route::get('anemometers/{anemometer}/readings/{reading}', [AnemometerReadingController::class, 'show']);
 
-    // readings (NO export route)
+    // readings
     Route::apiResource('readings', ReadingController::class);
 });

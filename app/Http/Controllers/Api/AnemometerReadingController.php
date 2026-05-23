@@ -8,6 +8,7 @@ use App\Http\Responses\DrfPagination;
 use App\Models\Reading;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Port of AnemometerReadingViewSet — readings nested under an anemometer.
@@ -47,5 +48,45 @@ class AnemometerReadingController extends Controller
             ->firstOrFail();
 
         return new ReadingDetailResource($reading);
+    }
+
+    /**
+     * GET /api/anemometers/{anemometer}/readings/export.
+     */
+    public function export(Request $request, string $anemometerId)
+    {
+        $request->validate([
+            'format' => 'required|in:csv,json',
+        ]);
+
+        $readings = Reading::query()
+            ->with(['anemometer', 'tags'])
+            ->where('anemometer_id', $anemometerId)
+            ->get();
+
+        $format = $request->input('format');
+
+        if ($format === 'json') {
+            return response()->json($readings->map(function ($reading) {
+                return (new ReadingResource($reading))->resolve();
+            }));
+        }
+
+        return response()->streamDownload(function () use ($readings) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['id', 'speed', 'recorded_at', 'anemometer_id', 'tags']);
+
+            foreach ($readings as $reading) {
+                fputcsv($handle, [
+                    $reading->id,
+                    $reading->speed,
+                    $reading->recorded_at->toISOString(),
+                    $reading->anemometer_id,
+                    implode(',', $reading->tags->pluck('name')->toArray()),
+                ]);
+            }
+
+            fclose($handle);
+        }, 'readings.csv');
     }
 }
