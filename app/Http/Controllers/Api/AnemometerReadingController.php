@@ -25,10 +25,7 @@ class AnemometerReadingController extends Controller
      */
     public function index(Request $request, string $anemometerId): array
     {
-        $readings = Reading::query()
-            ->with(['anemometer', 'tags'])
-            ->where('anemometer_id', $anemometerId)
-            ->paginate();
+        $readings = $this->readingsQuery($anemometerId)->paginate();
 
         return DrfPagination::shape(
             $readings,
@@ -41,9 +38,7 @@ class AnemometerReadingController extends Controller
      */
     public function show(string $anemometerId, string $readingId): ReadingDetailResource
     {
-        $reading = Reading::query()
-            ->with(['anemometer', 'tags'])
-            ->where('anemometer_id', $anemometerId)
+        $reading = $this->readingsQuery($anemometerId)
             ->where('id', $readingId)
             ->firstOrFail();
 
@@ -59,34 +54,39 @@ class AnemometerReadingController extends Controller
             'format' => 'required|in:csv,json',
         ]);
 
-        $readings = Reading::query()
-            ->with(['anemometer', 'tags'])
-            ->where('anemometer_id', $anemometerId)
-            ->get();
-
+        $readings = $this->readingsQuery($anemometerId)->get();
         $format = $request->input('format');
 
         if ($format === 'json') {
-            return response()->json($readings->map(function ($reading) {
-                return (new ReadingResource($reading))->resolve();
-            }));
+            return response()->json($readings->map(fn (Reading $r) => (new ReadingResource($r))->resolve()));
         }
 
         return response()->streamDownload(function () use ($readings) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['id', 'speed', 'recorded_at', 'anemometer_id', 'tags']);
+            fputcsv($handle, ['id', 'speed', 'recorded_at', 'tags']);
 
             foreach ($readings as $reading) {
                 fputcsv($handle, [
                     $reading->id,
                     $reading->speed,
-                    $reading->recorded_at->toISOString(),
-                    $reading->anemometer_id,
+                    $reading->recorded_at->toJSON(),
                     implode(',', $reading->tags->pluck('name')->toArray()),
                 ]);
             }
 
             fclose($handle);
-        }, 'readings.csv');
+        }, 'readings.csv', [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    /**
+     * Shared query builder for readings nested under an anemometer.
+     */
+    private function readingsQuery(string $anemometerId): \Illuminate\Database\Eloquent\Builder
+    {
+        return Reading::query()
+            ->with(['anemometer', 'tags'])
+            ->where('anemometer_id', $anemometerId);
     }
 }
